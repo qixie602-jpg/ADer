@@ -3,8 +3,9 @@ from torch import optim as optim
 from timm.optim.adafactor import Adafactor
 from timm.optim.adahessian import Adahessian
 from timm.optim.adamp import AdamP
-from timm.optim.nadam import Nadam
-from timm.optim.radam import RAdam
+# from timm.optim.nadam import Nadam
+from torch.optim import NAdam as Nadam
+from torch.optim.radam import RAdam as RAdam
 from timm.optim.rmsprop_tf import RMSpropTF
 from timm.optim.sgdp import SGDP
 from timm.optim.lookahead import Lookahead

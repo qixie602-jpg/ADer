@@ -7,7 +7,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-def main():
+def main():	
 	parser = argparse.ArgumentParser()
 	# parser.add_argument('-c', '--cfg_path', default='configs/rd_mvtec_debug.py')
 	# parser.add_argument('-c', '--cfg_path', default='configs/invad_mvtec_debug.py')

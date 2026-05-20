@@ -7,7 +7,7 @@ class MVTecSolver(object):
         'bracket_black', 'bracket_brown', 'bracket_white', 'connector', 'metal_plate', 'tubes'
     ]
 
-    def __init__(self, root='data/mvtec'):
+    def __init__(self, root='/home/featurize/work/data/mpdd', is2D=False):
         self.root = root
         self.meta_path = f'{root}/meta.json'
         self.phases = ['train', 'test']
@@ -43,7 +43,7 @@ class MVTecSolver(object):
 
 
 if __name__ == '__main__':
-    # runner = MVTecSolver(root='data/mvtec', is2D=True)
-    # runner.run()
-    runner = MVTecSolver(root='/fuxi_team14/users/haoyanghe/codes/data/ft_local/mpdd/MPDD')
+    runner = MVTecSolver(root='/home/featurize/work/data/mpdd', is2D=True)
     runner.run()
+    # runner = MVTecSolver(root='/fuxi_team14/users/haoyanghe/codes/data/ft_local/mpdd/MPDD')
+    # runner.run()

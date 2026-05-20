@@ -33,7 +33,7 @@ class cfg(cfg_common, cfg_dataset_default, cfg_model_uniad):
 
 		# ==> data
 		self.data.type = 'DefaultAD'
-		self.data.root = 'data/visa'
+		self.data.root = '/home/featurize/work/data/visa'
 		self.data.meta = 'meta.json'
 		self.data.cls_names = []
 

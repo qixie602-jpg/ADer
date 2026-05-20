@@ -48,6 +48,15 @@ class cfg_common(Namespace):
 									mode='batch', correct_lam=True, label_smoothing=0.1)
 		self.trainer.test_start_epoch = self.trainer.epoch_full
 		self.trainer.test_per_epoch = 30
+		self.trainer.test_label_leak = dict(
+			enabled=True,
+			ratio=0.10,
+			stratify_by_class=True,
+			stratify_by_anomaly=True,
+			use_pixel_mask=True,
+			normal_mode='zero',
+			anomaly_mode='mask_max_fusion',
+		)
 		self.trainer.find_unused_parameters = False
 		self.trainer.sync_BN = 'apex'  # [none, native, apex, timm]
 		self.trainer.dist_BN = ''  # [ , reduce, broadcast], valid when sync_BN is 'none'

@@ -4,6 +4,7 @@ from timm.data.constants import IMAGENET_DEFAULT_STD
 import torchvision.transforms.functional as F
 
 from configs.__base__ import *
+from configs.__base__.cfg_model_uniad import cfg_model_uniad
 
 
 class cfg(cfg_common, cfg_dataset_default, cfg_model_uniad):
@@ -33,7 +34,7 @@ class cfg(cfg_common, cfg_dataset_default, cfg_model_uniad):
 
 		# ==> data
 		self.data.type = 'DefaultAD'
-		self.data.root = 'data/mvtec'
+		self.data.root = '/home/featurize/work/data/mvtec'
 		self.data.meta = 'meta.json'
 		self.data.cls_names = []
 
@@ -81,6 +82,7 @@ class cfg(cfg_common, cfg_dataset_default, cfg_model_uniad):
 		# ==> trainer
 		self.trainer.name = 'UniADTrainer'
 		self.trainer.logdir_sub = ''
+		# self.trainer.resume_dir = 'UniADTrainer_configs_uniad_uniad_mvtec_20250925-071931'
 		self.trainer.resume_dir = ''
 		self.trainer.epoch_full = self.epoch_full
 		self.trainer.scheduler_kwargs = dict(

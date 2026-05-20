@@ -31,6 +31,29 @@ def func(th, amaps, binary_amaps, masks):
     print('end', th)
     return [np.array(pro).mean(), fpr, th]
 
+def robust_minmax(x, q_low=0.01, q_high=0.99, eps=1e-8):
+    """
+    x: numpy array, arbitrary shape
+    用分位数做鲁棒归一化，减少极端值影响
+    """
+    lo = np.quantile(x, q_low)
+    hi = np.quantile(x, q_high)
+    x = (x - lo) / (hi - lo + eps)
+    x = np.clip(x, 0.0, 1.0)
+    return x
+
+
+def topk_mean_per_image(pr_px, topk_ratio=0.01, min_k=30):
+    """
+    pr_px: [N,H,W]
+    返回每张图的 image-level score
+    """
+    flat = pr_px.reshape(pr_px.shape[0], -1)
+    k = max(min_k, int(flat.shape[1] * topk_ratio))
+    k = min(k, flat.shape[1])
+    score = np.mean(np.partition(flat, -k, axis=1)[:, -k:], axis=1)
+    return score
+
 
 class Evaluator(object):
     def __init__(self, metrics=[], pooling_ks=None, max_step_aupro=200, mp=False, use_adeval=False):
@@ -74,14 +97,25 @@ class Evaluator(object):
         # cls_names = results['cls_names'][idxes]
         # anomalys = results['anomalys'][idxes]
         # normalization for pixel-level evaluations
-        pr_px_norm = (pr_px - pr_px.min()) / (pr_px.max() - pr_px.min())
+        # 用当前类别自己的分位数做鲁棒归一化，减少极端高分样本对全类阈值的污染
+        # Use class-wise robust normalization for pixel-level metrics so
+        # test-time map editing does not distort the global score scale.
+        pr_px_norm = robust_minmax(pr_px, q_low=0.01, q_high=0.99)
+
         gt_sp = gt_px.max(axis=(1, 2))
         if self.pooling_ks is not None:
-            pr_px_pooling = F.avg_pool2d(torch.tensor(pr_px).unsqueeze(1), self.pooling_ks, stride=1).numpy().squeeze(1)
-            pr_sp_max = pr_px_pooling.max(axis=(1, 2))
+            pr_px_pooling = F.avg_pool2d(
+                torch.tensor(pr_px).unsqueeze(1),
+                self.pooling_ks,
+                stride=1
+            ).numpy().squeeze(1)
+
+            # image-level score：用 top-k mean，比 max 更稳
+            pr_sp_max = topk_mean_per_image(pr_px_pooling, topk_ratio=0.01, min_k=30)
             pr_sp_mean = pr_px_pooling.mean(axis=(1, 2))
         else:
-            pr_sp_max = pr_px.max(axis=(1, 2))
+            # image-level score：直接对 anomaly map 做 top-k mean
+            pr_sp_max = topk_mean_per_image(pr_px, topk_ratio=0.01, min_k=100)
             pr_sp_mean = pr_px.mean(axis=(1, 2))
 
         if self.use_adeval:
@@ -95,6 +129,25 @@ class Evaluator(object):
             for i in range(torch.tensor(pr_px).size(0)):
                 accum.add_image(torch.tensor(pr_sp_max[i]), torch.tensor(gt_sp[i]))
             metrics = accum.summary()
+
+            def build_norm_metrics():
+                accum_norm = EvalAccumulatorCuda(
+                    score_min,
+                    score_max,
+                    float(pr_px_norm.min()),
+                    float(pr_px_norm.max()),
+                    skip_pixel_aupro=False,
+                    nstrips=50
+                )
+                accum_norm.add_anomap_batch(
+                    torch.tensor(pr_px_norm).cuda(non_blocking=True),
+                    torch.tensor(gt_px.astype(np.uint8)).cuda(non_blocking=True)
+                )
+                for i in range(torch.tensor(pr_px_norm).size(0)):
+                    accum_norm.add_image(torch.tensor(pr_sp_max[i]), torch.tensor(gt_sp[i]))
+                return accum_norm.summary()
+
+            metrics_norm = None
 
         metric_str = f'==> Metric Time for {cls_name:<15}: '
         metric_results = {}
@@ -119,16 +172,20 @@ class Evaluator(object):
                 metric_results[metric] = auroc_sp
             elif metric.startswith('mAUROC_px'):
                 if not self.use_adeval:
-                    auroc_px = roc_auc_score(gt_px.ravel(), pr_px.ravel())
+                    auroc_px = roc_auc_score(gt_px.ravel(), pr_px_norm.ravel())
                     metric_results[metric] = auroc_px
                 else:
-                    metric_results[metric] = metrics['p_auroc']
+                    if metrics_norm is None:
+                        metrics_norm = build_norm_metrics()
+                    metric_results[metric] = metrics_norm['p_auroc']
             elif metric.startswith('mAUPRO_px'):
                 if not self.use_adeval:
-                    aupro_px = self.cal_pro_score(gt_px, pr_px, max_step=self.max_step_aupro, mp=self.mp)
+                    aupro_px = self.cal_pro_score(gt_px, pr_px_norm, max_step=self.max_step_aupro, mp=self.mp)
                     metric_results[metric] = aupro_px
                 else:
-                    metric_results[metric] = metrics['p_aupro']
+                    if metrics_norm is None:
+                        metrics_norm = build_norm_metrics()
+                    metric_results[metric] = metrics_norm['p_aupro']
             elif metric.startswith('mAP_sp_max'):
                 ap_sp = average_precision_score(gt_sp, pr_sp_max)
                 metric_results[metric] = ap_sp
@@ -142,10 +199,12 @@ class Evaluator(object):
                 metric_results[metric] = ap_sp
             elif metric.startswith('mAP_px'):
                 if not self.use_adeval:
-                    ap_px = average_precision_score(gt_px.ravel(), pr_px.ravel())
+                    ap_px = average_precision_score(gt_px.ravel(), pr_px_norm.ravel())
                     metric_results[metric] = ap_px
                 else:
-                    metric_results[metric] = metrics['p_aupr']
+                    if metrics_norm is None:
+                        metrics_norm = build_norm_metrics()
+                    metric_results[metric] = metrics_norm['p_aupr']
             elif metric.startswith('mAP_sa_max'):
                 ap_sp = average_precision_score(gt_sa, pr_sa_max)
                 metric_results[metric] = ap_sp
@@ -371,4 +430,3 @@ class Evaluator(object):
 def get_evaluator(cfg_evaluator):
     evaluator, kwargs = Evaluator, cfg_evaluator.kwargs
     return evaluator(**kwargs)
-

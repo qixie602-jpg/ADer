@@ -82,7 +82,14 @@ class BaseTrainer():
         cfg.data.train_size, cfg.data.test_size = len(self.train_loader), len(self.test_loader)
         cfg.data.train_length, cfg.data.test_length = self.train_loader.dataset.length, self.test_loader.dataset.length
         self.cls_names = self.train_loader.dataset.cls_names
-        self.mixup_fn = Mixup(**cfg.trainer.mixup_kwargs) if cfg.trainer.mixup_kwargs['prob'] > 0 else None
+        # self.mixup_fn = Mixup(**cfg.trainer.mixup_kwargs) if cfg.trainer.mixup_kwargs['prob'] > 0 else None
+        self.mixup_fn = (
+            Mixup(**cfg.trainer.mixup_kwargs)
+            if cfg.trainer.mixup_kwargs is not None
+            and cfg.trainer.mixup_kwargs.get('prob', 0) > 0
+            else None
+        )
+
         self.scheduler = get_scheduler(cfg, self.optim)
         self.evaluator = get_evaluator(cfg.evaluator)
         self.metrics = self.evaluator.metrics
